@@ -93,6 +93,7 @@ fresh implants, but the two states are never conflated.
 - [Installation](docs/installation.md)
 - [NixOS deployment](docs/nixos.md)
 - [DFIR usage](docs/dfir.md)
+- [MicroVM live testing](test/microvm/README.md)
 - [Security notes and limitations](docs/security.md)
 - [Troubleshooting](docs/troubleshooting.md)
 

@@ -54,20 +54,16 @@ impl Fanotify {
         self.fd
     }
 
-    /// Add an event mask on a mount (covers the whole filesystem).
-    pub fn mark_mount(&self, path: &Path, mask: u64) -> io::Result<()> {
-        self.mark(path, mask, true)
-    }
-
-    /// Add an event mask on a directory (covers the directory tree).
-    pub fn mark_dir(&self, path: &Path, mask: u64) -> io::Result<()> {
-        self.mark(path, mask, false)
-    }
-
-    fn mark(&self, path: &Path, mask: u64, mount: bool) -> io::Result<()> {
+    /// Mark the entire filesystem containing `path`. Directory-only marks do
+    /// not deliver events on some filesystems (for example the initramfs
+    /// rootfs a microvm boots from), while filesystem marks do.
+    /// Mark the entire filesystem containing `path`. Directory-only marks do
+    /// not deliver events on some filesystems (for example the initramfs
+    /// rootfs a microvm boots from), while filesystem marks do.
+    pub fn mark_filesystem(&self, path: &Path, mask: u64) -> io::Result<()> {
         let c_path = CString::new(path.as_os_str().as_bytes())
             .map_err(|_| io::Error::other("path contains NUL"))?;
-        let flags = libc::FAN_MARK_ADD | if mount { libc::FAN_MARK_MOUNT } else { 0 };
+        let flags = libc::FAN_MARK_ADD | libc::FAN_MARK_FILESYSTEM;
         let ret = unsafe { libc::fanotify_mark(self.fd, flags, mask, AT_FDCWD, c_path.as_ptr()) };
         if ret < 0 {
             return Err(io::Error::last_os_error());

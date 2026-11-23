@@ -39,13 +39,8 @@ pub async fn run_monitor(config: Arc<Config>, pipeline: Arc<Pipeline>) -> anyhow
     );
     for watch in &config.monitoring.watch_paths {
         let path = PathBuf::from(watch);
-        let result = if watch == "/" {
-            fan.mark_mount(&path, mask)
-        } else {
-            fan.mark_dir(&path, mask)
-        };
-        match result {
-            Ok(()) => info!(path = %watch, mount = watch == "/", "watching"),
+        match fan.mark_filesystem(&path, mask) {
+            Ok(()) => info!(path = %watch, "watching whole filesystem containing path"),
             Err(e) => anyhow::bail!("cannot watch {watch}: {e}"),
         }
     }

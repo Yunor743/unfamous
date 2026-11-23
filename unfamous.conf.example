@@ -114,6 +114,8 @@ minimum_malicious_providers = 1
 # A file known to at most this many providers counts as RARE.
 rare_max_providers = 1
 # Actions: "alert" (write alert), "log" (log line only), "none".
+# malicious_action may also be "alert_block": additionally answer FAN_DENY
+# for monitored executions (requires monitoring.block_on_malicious = true).
 unknown_action = "alert"
 malicious_action = "alert"
 suspicious_action = "alert"

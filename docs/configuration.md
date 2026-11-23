@@ -96,7 +96,7 @@ Provider specifics are described in [providers.md](providers.md).
 | `detection_ratio_threshold` | none | When set (0.0 to 1.0), a provider detection ratio at or above it produces `SUSPICIOUS`. |
 | `rare_max_providers` | `1` | A file known to at most this many providers counts as `RARE`. |
 | `unknown_action` | `alert` | Action for the `UNKNOWN` verdict: `alert`, `log` or `none`. |
-| `malicious_action` | `alert` | Action for `KNOWN_BAD`. |
+| `malicious_action` | `alert` | Action for `KNOWN_BAD`: `alert`, `log`, `none`, or `alert_block` to additionally answer `FAN_DENY` on monitored executions (together with `[monitoring] block_on_malicious = true`). |
 | `suspicious_action` | `alert` | Action for `SUSPICIOUS`. |
 | `rare_action` | `alert` | Action for `RARE`. |
 

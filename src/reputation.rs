@@ -129,7 +129,9 @@ pub fn decide(
 
     let finish = |verdict, action: &str, reasons: Vec<String>| {
         let should_alert = match verdict {
-            ReputationVerdict::KnownBad => policy.alert_on_known_bad && action == "alert",
+            ReputationVerdict::KnownBad => {
+                policy.alert_on_known_bad && (action == "alert" || action == "alert_block")
+            }
             ReputationVerdict::Unknown => policy.alert_on_unknown && action == "alert",
             ReputationVerdict::Rare => policy.alert_on_rare && action == "alert",
             ReputationVerdict::Suspicious => policy.alert_on_suspicious && action == "alert",
@@ -337,6 +339,17 @@ mod tests {
 
     fn no_lists() -> ListHits {
         ListHits::default()
+    }
+
+    #[test]
+    fn alert_block_still_alerts_and_blocks() {
+        let mut p = policy();
+        p.malicious_action = "alert_block".into();
+        let outcomes = vec![summary("virustotal", hit(Verdict::Malicious, 30, 60))];
+        let d = decide(&p, &outcomes, &no_lists(), false);
+        assert_eq!(d.verdict, ReputationVerdict::KnownBad);
+        assert!(d.should_alert);
+        assert!(d.block);
     }
 
     #[test]

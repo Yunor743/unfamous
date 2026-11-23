@@ -629,8 +629,16 @@ impl Config {
             ("suspicious_action", &self.reputation.suspicious_action),
             ("rare_action", &self.reputation.rare_action),
         ] {
-            if !matches!(value.as_str(), "alert" | "log" | "none") {
-                anyhow::bail!("reputation.{key} must be \"alert\", \"log\" or \"none\"");
+            let allowed = if key == "malicious_action" {
+                matches!(value.as_str(), "alert" | "alert_block" | "log" | "none")
+            } else {
+                matches!(value.as_str(), "alert" | "log" | "none")
+            };
+            if !allowed {
+                anyhow::bail!(
+                    "reputation.{key} must be \"alert\", \"log\" or \"none\"{}",
+                    if key == "malicious_action" { " (or \"alert_block\" to answer FAN_DENY)" } else { "" }
+                );
             }
         }
         if !self.lists.allowlist.files.is_empty() || !self.lists.denylist.files.is_empty() {
@@ -706,5 +714,120 @@ impl Config {
     #[must_use]
     pub fn resolve_cache_path(&self) -> PathBuf {
         PathBuf::from(&self.cache.database_path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid() -> Config {
+        Config::default()
+    }
+
+    #[test]
+    fn default_config_is_valid() {
+        valid().validate().expect("default config must validate");
+    }
+
+    #[test]
+    fn alert_block_allowed_only_for_malicious_action() {
+        let mut config = valid();
+        config.reputation.malicious_action = "alert_block".into();
+        config.validate().expect("alert_block is valid for malicious_action");
+        config.reputation.unknown_action = "alert_block".into();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn actions_validated() {
+        let mut config = valid();
+        config.reputation.unknown_action = "explode".into();
+        assert!(config.validate().is_err());
+        config.reputation.unknown_action = "alert".into();
+        config.reputation.malicious_action = "explode".into();
+        assert!(config.validate().is_err());
+        config.reputation.malicious_action = "alert".into();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn algorithms_validated() {
+        let mut config = valid();
+        config.hashing.algorithms = vec!["crc32".into()];
+        assert!(config.validate().is_err());
+        config.hashing.algorithms = vec!["sha256".into(), "md5".into()];
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn virustotal_needs_key_env() {
+        let mut config = valid();
+        config.providers.virustotal.enabled = true;
+        config.providers.virustotal.api_key_env = None;
+        assert!(config.validate().is_err());
+        config.providers.virustotal.api_key_env = Some("UNFAMOUS_VT_API_KEY".into());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn upload_files_rejected() {
+        let mut config = valid();
+        config.privacy.upload_files = true;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn file_mode_validated() {
+        let mut config = valid();
+        config.alerts.file_mode = "0999".into();
+        assert!(config.validate().is_err());
+        config.alerts.file_mode = "0640".into();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn queue_bounds_validated() {
+        let mut config = valid();
+        config.monitoring.queue_size = 0;
+        assert!(config.validate().is_err());
+        config.monitoring.queue_size = 4096;
+        config.monitoring.worker_count = 0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn custom_type_validated() {
+        let mut config = valid();
+        config.file_types.custom.insert(
+            "bad".into(),
+            CustomType { extensions: vec![], magic_hex: vec!["zz".into()], require_magic: true },
+        );
+        assert!(config.validate().is_err());
+        config.file_types.custom.get_mut("bad").expect("entry").magic_hex = vec!["deadbeef".into()];
+        config.file_types.custom.get_mut("bad").expect("entry").extensions = vec![".fw".into()];
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn unknown_top_level_key_rejected() {
+        let raw = r#"
+[general]
+mode = "monitor"
+[no_such_section]
+key = 1
+"#;
+        let result: Result<Config, _> = toml::from_str(raw);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn minimal_config_parses() {
+        let raw = r#"
+[monitoring]
+watch_paths = ["/root"]
+"#;
+        let config: Config = toml::from_str(raw).expect("minimal config");
+        assert_eq!(config.monitoring.watch_paths, vec!["/root".to_string()]);
     }
 }

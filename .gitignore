@@ -4,3 +4,4 @@
 *.db-journal
 __pycache__/
 *.swp
+test/microvm/result
