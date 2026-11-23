@@ -63,6 +63,11 @@ pub struct Monitoring {
     pub worker_count: usize,
     #[serde(default = "default_watch_paths")]
     pub watch_paths: Vec<String>,
+    /// Paths excluded from monitoring: events for files under any of these
+    /// roots are answered allow and skipped (useful for /nix/store, caches,
+    /// package build trees).
+    #[serde(default)]
+    pub exclude_paths: Vec<String>,
     #[serde(default = "default_true")]
     pub fail_open: bool,
     #[serde(default = "default_response_timeout_ms")]
@@ -82,6 +87,7 @@ impl Default for Monitoring {
             queue_size: default_queue_size(),
             worker_count: default_worker_count(),
             watch_paths: default_watch_paths(),
+            exclude_paths: Vec::new(),
             fail_open: true,
             response_timeout_ms: default_response_timeout_ms(),
             block_on_malicious: false,
@@ -471,6 +477,9 @@ pub struct Dfir {
     pub follow_symlinks: bool,
     #[serde(default = "default_dfir_threads")]
     pub threads: usize,
+    /// Paths excluded from scanning (pruned during traversal).
+    #[serde(default)]
+    pub exclude_paths: Vec<String>,
 }
 
 impl Default for Dfir {
@@ -479,6 +488,7 @@ impl Default for Dfir {
             max_depth: default_dfir_depth(),
             follow_symlinks: false,
             threads: default_dfir_threads(),
+            exclude_paths: Vec::new(),
         }
     }
 }
@@ -568,6 +578,16 @@ impl Config {
         if self.monitoring.watch_paths.is_empty() {
             anyhow::bail!("monitoring.watch_paths must contain at least one path");
         }
+        for path in self
+            .monitoring
+            .exclude_paths
+            .iter()
+            .chain(self.dfir.exclude_paths.iter())
+        {
+            if !path.starts_with('/') {
+                anyhow::bail!("exclude_paths entries must be absolute paths, got {path:?}");
+            }
+        }
         if self.hashing.algorithms.is_empty() {
             anyhow::bail!("hashing.algorithms must not be empty");
         }
@@ -637,7 +657,11 @@ impl Config {
             if !allowed {
                 anyhow::bail!(
                     "reputation.{key} must be \"alert\", \"log\" or \"none\"{}",
-                    if key == "malicious_action" { " (or \"alert_block\" to answer FAN_DENY)" } else { "" }
+                    if key == "malicious_action" {
+                        " (or \"alert_block\" to answer FAN_DENY)"
+                    } else {
+                        ""
+                    }
                 );
             }
         }
@@ -726,15 +750,34 @@ mod tests {
     }
 
     #[test]
+    fn exclude_paths_validated_and_matched() {
+        let mut config = valid();
+        config.monitoring.exclude_paths = vec!["nix/store".into()];
+        assert!(config.validate().is_err());
+        config.monitoring.exclude_paths = vec!["/nix/store".into()];
+        assert!(config.validate().is_ok());
+        config.dfir.exclude_paths = vec!["/var/cache".into()];
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
     fn default_config_is_valid() {
         valid().validate().expect("default config must validate");
+    }
+
+    #[test]
+    fn example_config_is_valid() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("unfamous.conf.example");
+        Config::load(&path).expect("example config must validate");
     }
 
     #[test]
     fn alert_block_allowed_only_for_malicious_action() {
         let mut config = valid();
         config.reputation.malicious_action = "alert_block".into();
-        config.validate().expect("alert_block is valid for malicious_action");
+        config
+            .validate()
+            .expect("alert_block is valid for malicious_action");
         config.reputation.unknown_action = "alert_block".into();
         assert!(config.validate().is_err());
     }
@@ -801,11 +844,25 @@ mod tests {
         let mut config = valid();
         config.file_types.custom.insert(
             "bad".into(),
-            CustomType { extensions: vec![], magic_hex: vec!["zz".into()], require_magic: true },
+            CustomType {
+                extensions: vec![],
+                magic_hex: vec!["zz".into()],
+                require_magic: true,
+            },
         );
         assert!(config.validate().is_err());
-        config.file_types.custom.get_mut("bad").expect("entry").magic_hex = vec!["deadbeef".into()];
-        config.file_types.custom.get_mut("bad").expect("entry").extensions = vec![".fw".into()];
+        config
+            .file_types
+            .custom
+            .get_mut("bad")
+            .expect("entry")
+            .magic_hex = vec!["deadbeef".into()];
+        config
+            .file_types
+            .custom
+            .get_mut("bad")
+            .expect("entry")
+            .extensions = vec![".fw".into()];
         assert!(config.validate().is_ok());
     }
 

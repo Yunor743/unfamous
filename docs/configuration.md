@@ -35,6 +35,7 @@ A complete example ships as `unfamous.conf.example`.
 | `queue_size` | `4096` | Bounded event queue between the reader and the workers. |
 | `worker_count` | `4` | Worker tasks processing events concurrently. |
 | `watch_paths` | `["/"]` | Paths to watch. `/` is marked as a mount; other paths are marked as directories and cover their whole tree. |
+| `exclude_paths` | `[]` | Absolute paths excluded from monitoring: events for files under any of these roots are answered allow and skipped. Use for noisy trees such as `/nix/store`, package caches or build directories. |
 | `fail_open` | `true` | Answer `FAN_ALLOW` when processing fails or times out. Setting this to false answers `FAN_DENY` on failure, which can make a system unusable when a provider outage coincides with a burst of executions. |
 | `response_timeout_ms` | `3000` | Maximum enrichment time before a permission event is answered per `fail_open`. |
 | `block_on_malicious` | `false` | Answer `FAN_DENY` for `KNOWN_BAD` verdicts. Explicit opt-in for enforcement; the default policy only alerts. |
@@ -147,6 +148,7 @@ Entries are validated at startup; a malformed hash aborts startup.
 | `max_depth` | `16` | Maximum recursion depth for `scan`. The `--depth` flag overrides it. |
 | `follow_symlinks` | `false` | Follow symbolic links while scanning and when opening files. |
 | `threads` | `4` | Parallel scan workers. |
+| `exclude_paths` | `[]` | Absolute paths pruned from traversal (for example `/nix/store`, `/var/cache`). Scanning an excluded path explicitly still works; the exclusion applies to the subtree. |
 
 ## [privacy]
 

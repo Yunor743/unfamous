@@ -52,10 +52,18 @@ pub async fn run_scan(
         let walk_symlinks = options.follow_symlinks_override || config.dfir.follow_symlinks;
 
         let walker_path = options.path.clone();
+        let excludes: Vec<String> = config.dfir.exclude_paths.clone();
         let walker = tokio::task::spawn_blocking(move || {
             for entry in walkdir::WalkDir::new(&walker_path)
                 .max_depth(walk_depth)
                 .follow_links(walk_symlinks)
+                .into_iter()
+                .filter_entry(|e| {
+                    // Keep the scan root itself so an explicit scan of an
+                    // excluded path still honors the operator's request, but
+                    // prune excluded subtrees.
+                    e.depth() == 0 || !crate::daemon::is_excluded(e.path(), &excludes)
+                })
             {
                 match entry {
                     Ok(entry) if entry.file_type().is_file() => {

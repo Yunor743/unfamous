@@ -37,6 +37,13 @@ api_key_env = "UNFAMOUS_VT_API_KEY"
 rate_limit_per_minute = 4
 ```
 
+There is no keyless VirusTotal API. The `virustotal.com/gui/file/{hash}` page
+is a browser UI backed by undocumented internal endpoints that are not
+licensed for programmatic use; unfamous therefore does not implement it. If
+you do not have a VirusTotal key, set `enabled = false` and use the keyless
+providers instead: MalwareBazaar needs a free key, but OTX works anonymously
+and CIRCL Hashlookup needs no authentication at all.
+
 ## MalwareBazaar (abuse.ch)
 
 - Endpoint: `POST https://mb-api.abuse.ch/api/v1/` with form data

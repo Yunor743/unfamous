@@ -119,6 +119,35 @@ async fn oversized_file_skipped() {
 }
 
 #[tokio::test]
+async fn excluded_subtree_is_not_scanned() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut config = temp_config(dir.path(), None);
+    config.dfir.exclude_paths = vec![dir.path().join("excluded").display().to_string()];
+    let pipeline = Pipeline::build(Arc::new(config)).expect("pipeline");
+
+    let excluded_dir = dir.path().join("excluded");
+    std::fs::create_dir_all(&excluded_dir).expect("mkdir");
+    let hidden = write_fixture(&excluded_dir, "hidden.js", b"var secret = 1;");
+    let kept = write_fixture(dir.path(), "kept.js", b"var kept = 1;");
+
+    // Scanning the tree skips the excluded subtree entirely.
+    let outcome = pipeline
+        .process(&FileContext {
+            path: Some(hidden.clone()),
+            fd: None,
+            pid: None,
+            mode: "scan",
+            bypass_cache: false,
+        })
+        .await
+        .expect("pipeline run");
+    assert!(outcome.alert.is_none(), "excluded file must not be scanned");
+
+    let alert = scan(&pipeline, &kept).await.expect("alert for kept file");
+    assert_eq!(alert.file_path, kept.display().to_string());
+}
+
+#[tokio::test]
 async fn unreadable_file_does_not_crash() {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = Arc::new(temp_config(dir.path(), None));

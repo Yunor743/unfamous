@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::os::unix::io::{FromRawFd, RawFd};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -61,7 +61,29 @@ pub struct PipelineOutcome {
     pub decision: Option<Decision>,
 }
 
+/// Component-aware exclusion check: `/foobar` is NOT under `/foo`, and a
+/// trailing slash on a root does not matter. An empty root list excludes
+/// nothing.
+#[must_use]
+pub fn is_excluded(path: &Path, roots: &[String]) -> bool {
+    roots
+        .iter()
+        .any(|root| path.starts_with(Path::new(root.trim_end_matches('/'))))
+}
+
 impl Pipeline {
+    /// Combined exclusion roots: monitoring and DFIR exclusions both apply to
+    /// every mode.
+    fn exclusions(&self) -> Vec<String> {
+        self.config
+            .monitoring
+            .exclude_paths
+            .iter()
+            .chain(self.config.dfir.exclude_paths.iter())
+            .cloned()
+            .collect()
+    }
+
     pub fn build(config: Arc<Config>) -> anyhow::Result<Self> {
         let classifier = Classifier::from_config(&config.file_types);
         let allowlist = HashListSet::from_config(&config.lists.allowlist, ListKind::Allow)
@@ -224,6 +246,19 @@ impl Pipeline {
             .path
             .as_ref()
             .map_or_else(|| "<unknown path>".to_string(), |p| p.display().to_string());
+
+        // Excluded subtrees are skipped for every mode. With no path (an
+        // anonymous fd) the exclusion check cannot apply and the file is
+        // processed.
+        if let Some(path) = ctx.path.as_ref() {
+            if is_excluded(path, &self.exclusions()) {
+                debug!(path = %path.display(), "path is excluded, skipping");
+                return Ok(PipelineOutcome {
+                    alert: None,
+                    decision: None,
+                });
+            }
+        }
 
         let detection = if self.config.hashing.detect_file_type {
             let name = ctx
@@ -512,5 +547,27 @@ fn enforce_cache_size(cache: &Cache, config: &Config) {
             cache.trim_oldest_quarter();
             info!("cache exceeded max_size_mb; trimmed oldest entries");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_excluded_component_aware() {
+        let roots = vec!["/nix/store".to_string(), "/var/cache".to_string()];
+        assert!(is_excluded(Path::new("/nix/store"), &roots));
+        assert!(is_excluded(
+            Path::new("/nix/store/somepkg/file.txt"),
+            &roots
+        ));
+        assert!(is_excluded(Path::new("/var/cache/deep/nested"), &roots));
+        assert!(!is_excluded(Path::new("/nix/storehouse"), &roots));
+        assert!(!is_excluded(Path::new("/root"), &roots));
+        assert!(!is_excluded(Path::new("/etc/passwd"), &[]));
+        // Trailing slash on the root does not break matching.
+        let roots = vec!["/var/cache/".to_string()];
+        assert!(is_excluded(Path::new("/var/cache/apt"), &roots));
     }
 }

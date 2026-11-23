@@ -28,6 +28,12 @@ execution_monitoring = true
 file_access_monitoring = false
 # Watch file writes (FAN_CLOSE_WRITE) to catch newly written files.
 close_write_monitoring = true
+# Paths excluded from monitoring: events under these roots are answered
+# allow and skipped (noisy trees, package stores, caches).
+exclude_paths = [
+  "/nix/store",
+  "/var/cache"
+]
 # Bounded event queue between the fanotify reader and the workers.
 queue_size = 4096
 worker_count = 4
@@ -166,6 +172,11 @@ max_size_mb = 64
 max_depth = 16
 follow_symlinks = false
 threads = 4
+# Absolute paths pruned from scan traversal.
+exclude_paths = [
+  "/nix/store",
+  "/var/cache"
+]
 
 [privacy]
 # unfamous never uploads file contents; this key must stay false and is
