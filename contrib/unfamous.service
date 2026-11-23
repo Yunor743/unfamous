@@ -1,0 +1,38 @@
+[Unit]
+Description=Unfamous - Linux file reputation monitor
+Documentation=https://github.com/Yunor743/unfamous
+After=local-fs.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@bindir@/unfamous --config @config@/unfamous.conf
+Restart=on-failure
+RestartSec=5s
+
+# fanotify permission events require CAP_SYS_ADMIN. The daemon runs as root
+# but drops every other capability and is confined by the sandbox options
+# below.
+User=root
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_SYS_ADMIN
+AmbientCapabilities=CAP_SYS_ADMIN
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+ReadWritePaths=@statedir@ @logdir@
+StateDirectory=unfamous
+LogsDirectory=unfamous
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,173 @@
+# unfamous example configuration
+#
+# Copy this file to unfamous.conf and adjust. Every key is optional unless
+# noted; defaults are shown as comments where they differ from the example
+# value. API keys are never stored in this file: they are read from the
+# environment variable named by api_key_env.
+
+[general]
+# "monitor" (continuous fanotify monitoring) or "scan" (one-shot DFIR).
+mode = "monitor"
+# trace, debug, info, warn, error.
+log_level = "info"
+# "human" for console output, "json" for SIEM-friendly JSON lines.
+log_format = "human"
+# Empty = use the system hostname.
+hostname = ""
+# Offline mode disables every provider and relies on the cache and local
+# lists only.
+offline = false
+
+[monitoring]
+enabled = true
+# fanotify is the only monitoring backend; keep true.
+fanotify = true
+# Watch executions (FAN_OPEN_EXEC_PERM). Requires CAP_SYS_ADMIN.
+execution_monitoring = true
+# Watch every file open (FAN_OPEN_PERM). Much noisier; off by default.
+file_access_monitoring = false
+# Watch file writes (FAN_CLOSE_WRITE) to catch newly written files.
+close_write_monitoring = true
+# Bounded event queue between the fanotify reader and the workers.
+queue_size = 4096
+worker_count = 4
+# Directories or mount points to watch. "/" is marked as a mount.
+watch_paths = ["/"]
+# Fail open: answer FAN_ALLOW when processing fails or times out.
+fail_open = true
+# Maximum time spent enriching before a permission event is answered.
+response_timeout_ms = 3000
+# Explicit blocking: answer FAN_DENY on a KNOWN_BAD verdict. The default
+# policy never blocks; set true only if you understand the availability
+# risk.
+block_on_malicious = false
+
+[hashing]
+# Any subset of sha256, sha1, md5. sha256 is recommended.
+algorithms = ["sha256"]
+# Files larger than this are skipped (in MiB).
+max_file_size_mb = 512
+# Classify files by magic bytes before hashing.
+detect_file_type = true
+
+[file_types]
+pe = true
+elf = true
+shared_objects = true
+javascript = true
+hta = true
+vba = true
+cpl = true
+shell_scripts = false
+python = false
+powershell = false
+
+# User defined categories. An entry needs extensions, magic_hex or both.
+# require_magic = true means the extension alone never selects the category.
+#[file_types.custom.firmware]
+#extensions = [".fw"]
+#magic_hex = ["deadbeef"]
+#require_magic = true
+
+[providers.virustotal]
+enabled = true
+# The API key is read from this environment variable. Get a key at
+# https://www.virustotal.com/gui/my-apikey
+api_key_env = "UNFAMOUS_VT_API_KEY"
+timeout_seconds = 15
+# Public API quota is 4 requests/minute; align rate_limit_per_minute.
+rate_limit_per_minute = 240
+retries = 2
+
+[providers.malwarebazaar]
+enabled = true
+# Free auth key from https://auth.abuse.ch/
+api_key_env = "UNFAMOUS_MB_AUTH_KEY"
+timeout_seconds = 15
+rate_limit_per_minute = 240
+retries = 2
+
+[providers.otx]
+enabled = false
+# Optional: anonymous queries work but are heavily rate limited.
+api_key_env = "UNFAMOUS_OTX_API_KEY"
+timeout_seconds = 15
+rate_limit_per_minute = 60
+retries = 2
+
+[providers.circl_hashlookup]
+enabled = true
+# No authentication. Set a rate limit that is polite to the public service.
+timeout_seconds = 10
+rate_limit_per_minute = 60
+retries = 1
+
+[reputation]
+alert_on_unknown = true
+alert_on_known_bad = true
+alert_on_rare = false
+alert_on_suspicious = true
+# How many providers must flag a hash as malicious for KNOWN_BAD.
+minimum_malicious_providers = 1
+# Optional: flag SUSPICIOUS when a provider detection ratio crosses this.
+#detection_ratio_threshold = 0.3
+# A file known to at most this many providers counts as RARE.
+rare_max_providers = 1
+# Actions: "alert" (write alert), "log" (log line only), "none".
+unknown_action = "alert"
+malicious_action = "alert"
+suspicious_action = "alert"
+rare_action = "alert"
+
+[lists]
+# When true a denylist hit wins over allowlist and provider verdicts.
+denylist_overrides = true
+
+[lists.allowlist]
+# Inline entries, lowercase or uppercase hex.
+sha256 = []
+sha1 = []
+md5 = []
+# Or load from files, one hash per line, '#' comments allowed.
+files = []
+
+[lists.denylist]
+sha256 = []
+sha1 = []
+md5 = []
+files = []
+
+[cache]
+enabled = true
+# Only "sqlite" is implemented.
+backend = "sqlite"
+database_path = "/var/lib/unfamous/cache.db"
+default_ttl_seconds = 86400
+negative_ttl_seconds = 3600
+# Short TTL for provider errors so outages are retried soon.
+error_ttl_seconds = 300
+max_size_mb = 512
+
+[alerts]
+enabled = true
+directory = "/var/log"
+filename_prefix = "alerts"
+# "jsonl" (one JSON object per line, recommended) or "json" (a JSON array).
+format = "jsonl"
+daily_rotation = true
+retention_days = 30
+file_mode = "0600"
+# Rotate when a file grows past this size (MiB). 0 disables size rotation.
+max_size_mb = 64
+
+[dfir]
+max_depth = 16
+follow_symlinks = false
+threads = 4
+
+[privacy]
+# unfamous never uploads file contents; this key must stay false and is
+# validated at startup.
+upload_files = false
+# Set false to skip every provider query (hashes stay local).
+share_hashes = true

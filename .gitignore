@@ -1,0 +1,6 @@
+/target
+/result
+*.db
+*.db-journal
+__pycache__/
+*.swp
